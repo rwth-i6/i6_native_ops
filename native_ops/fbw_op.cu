@@ -235,61 +235,11 @@ void atomic_prob_add(float *a, float b) {
     } while (old != assumed);
 }
 
-template <typename T>
-void dump_to_file_1d(T *d_mem, unsigned n_d1, std::string const &path) {
-    std::vector<T> buffer(n_d1);
-
-    std::ofstream output(path.c_str(), std::ios::trunc | std::ios::out);
-    for (size_t i1 = 0ul; i1 < n_d1; i1++) {
-        T val = buffer[i1];
-        if (!std::numeric_limits<T>::has_infinity or !isinf(val)) {
-            output << i1 << ' ' << val << '\n';
-        }
-    }
-}
-
-template <typename T>
-void dump_to_file_2d(T *d_mem, unsigned n_d1, unsigned n_d2,
-                     std::string const &path) {
-    std::vector<T> buffer(n_d1 * n_d2);
-
-    std::ofstream output(path.c_str(), std::ios::trunc | std::ios::out);
-    for (size_t i1 = 0ul; i1 < n_d1; i1++) {
-        for (size_t i2 = 0ul; i2 < n_d2; i2++) {
-            T val = buffer[i1 * n_d2 + i2];
-            if (!std::numeric_limits<T>::has_infinity or !isinf(val)) {
-                output << i1 << ' ' << i2 << ' ' << val << '\n';
-            }
-        }
-    }
-}
-
-template <typename T>
-void dump_to_file_3d(T *d_mem, unsigned n_d1, unsigned n_d2, unsigned n_d3,
-                     std::string const &path) {
-    std::vector<T> buffer(n_d1 * n_d2 * n_d3);
-
-    std::ofstream output(path.c_str(), std::ios::trunc | std::ios::out);
-    for (size_t i1 = 0ul; i1 < n_d1; i1++) {
-        for (size_t i2 = 0ul; i2 < n_d2; i2++) {
-            for (size_t i3 = 0ul; i3 < n_d3; i3++) {
-                T val = buffer[i1 * n_d2 * n_d3 + i2 * n_d3 + i3];
-                if (!std::numeric_limits<T>::has_infinity or !isinf(val)) {
-                    output << i1 << ' ' << i2 << ' ' << i3 << ' ' << val
-                           << '\n';
-                }
-            }
-        }
-    }
-}
-
 DEF_KERNEL
 void init_bwd_state_buffer(float *states, unsigned *end_states, unsigned t,
-                           unsigned max_t, float *index,
-                           unsigned index_stride) {
+                           unsigned max_t, unsigned *seq_lens) {
     unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index[t * index_stride + idx] == 1.0 &&
-        (t == max_t || index[(t + 1) * index_stride + idx] == 0.0)) {
+    if (t + 1 == seq_lens[idx]) {
         unsigned state_idx = end_states[idx];
         states[state_idx] = 0.0;
     }
@@ -382,15 +332,27 @@ void compute_result(float *edge_buffer, float *out, unsigned *emission_idxs,
                     score);
 }
 
-void write_alignment_to_file(float *d_state_buffer, float *d_index,
-                             unsigned index_stride, unsigned *d_start_states,
-                             unsigned *d_end_states, float pruning,
-                             unsigned n_frames, unsigned n_seqs,
+void write_alignment_to_file(float *d_state_buffer, unsigned *d_seq_lens,
+                             unsigned *d_start_states, unsigned *d_end_states,
+                             float pruning, unsigned n_frames, unsigned n_seqs,
                              unsigned n_states, unsigned batch_idx) {
     std::vector<float> state_buffer((n_frames + 1u) * n_states);
-    std::vector<float> index(n_frames * index_stride);
+    std::vector<unsigned> seq_lens(n_seqs);
     std::vector<unsigned> start_states(n_seqs);
     std::vector<unsigned> end_states(n_seqs);
+
+    HANDLE_ERROR(cudaMemcpy(state_buffer.data(), d_state_buffer,
+                            state_buffer.size() * sizeof(float),
+                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpy(start_states.data(), d_start_states,
+                            start_states.size() * sizeof(float),
+                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpy(end_states.data(), d_end_states,
+                            end_states.size() * sizeof(float),
+                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpy(seq_lens.data(), d_seq_lens,
+                            seq_lens.size() * sizeof(unsigned),
+                            cudaMemcpyDeviceToHost));
 
     for (unsigned seq = 0u; seq < n_seqs; seq++) {
         std::stringstream filename;
@@ -398,7 +360,7 @@ void write_alignment_to_file(float *d_state_buffer, float *d_index,
         std::ofstream out(filename.str().c_str(),
                           std::ios::out | std::ios::trunc);
         for (unsigned t = 0u; t < n_frames; t++) {
-            if (t > 0u && index[seq * index_stride + t] <= 0.0) {
+            if (t > 0u && t >= seq_lens[seq]) {
                 break;
             }
             float sum = std::numeric_limits<float>::infinity();
@@ -420,11 +382,17 @@ void write_alignment_to_file(float *d_state_buffer, float *d_index,
     }
 }
 
-void write_output_to_file(float *d_out, float *d_index, unsigned index_stride,
-                          float pruning, unsigned n_frames, unsigned n_seqs,
+void write_output_to_file(float *d_out, unsigned *d_seq_lens, float pruning,
+                          unsigned n_frames, unsigned n_seqs,
                           unsigned n_emissions, unsigned batch_idx) {
     std::vector<float> buffer(n_frames * n_seqs * n_emissions);
-    std::vector<float> index(n_frames * index_stride);
+    std::vector<unsigned> seq_lens(n_seqs);
+
+    HANDLE_ERROR(cudaMemcpy(buffer.data(), d_out, buffer.size() * sizeof(float),
+                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpy(seq_lens.data(), d_seq_lens,
+                            seq_lens.size() * sizeof(unsigned),
+                            cudaMemcpyDeviceToHost));
 
     for (unsigned seq = 0u; seq < n_seqs; seq++) {
         std::stringstream filename;
@@ -432,7 +400,7 @@ void write_output_to_file(float *d_out, float *d_index, unsigned index_stride,
         std::ofstream out(filename.str().c_str(),
                           std::ios::out | std::ios::trunc);
         for (unsigned t = 0u; t < n_frames; t++) {
-            if (t > 0u && index[seq * index_stride + t] <= 0.0) {
+            if (t > 0u && t >= seq_lens[seq]) {
                 break;
             }
             for (unsigned e = 0u; e < n_emissions; e++) {
@@ -453,7 +421,7 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
     Ndarray *edges = &torch_inputs[1];
     Ndarray *weights = &torch_inputs[2];
     Ndarray *start_end_states = &torch_inputs[3];
-    Ndarray *index = &torch_inputs[4];
+    Ndarray *seq_lens = &torch_inputs[4];
     Ndarray *state_buffer = &torch_inputs[5];
 
     auto options = torch::TensorOptions().device(torch::kCUDA);
@@ -473,7 +441,7 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
 
     assert_cmp(Ndarray_DIMS(state_buffer)[0], ==, 2)
 
-    bool dump_alignment = false;
+        bool dump_alignment = false;
     bool dump_output = false;
     unsigned dump_every = 40u;
     static unsigned batch_idx = 0u;
@@ -496,7 +464,8 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
     unsigned *d_end_states =
         reinterpret_cast<unsigned *>(Ndarray_DEV_DATA_int32(start_end_states) +
                                      1 * Ndarray_STRIDE(start_end_states, 0));
-    float *d_index = Ndarray_DEV_DATA(index);
+    unsigned *d_seq_lens =
+        reinterpret_cast<unsigned *>(Ndarray_DEV_DATA_int32(seq_lens));
     float *d_state_buffer_prev =
         Ndarray_DEV_DATA(state_buffer) + 0 * Ndarray_STRIDE(state_buffer, 0);
     float *d_state_buffer_next =
@@ -514,7 +483,6 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
 
     unsigned frame_stride = Ndarray_STRIDE(am_scores, 0);
     unsigned sequence_stride = Ndarray_STRIDE(am_scores, 1);
-    unsigned index_stride = Ndarray_STRIDE(index, 0);
 
     assert_cmp(n_frames, >, 0);
     assert_cmp(n_states, >, 0);
@@ -585,7 +553,7 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
     for (unsigned t = n_frames; t > 0; t--) {
         start_dev_kernel2(init_bwd_state_buffer, 1, n_seqs, 0,
                           (d_state_buffer_prev, d_end_states, t - 1,
-                           n_frames - 1, d_index, index_stride));
+                           n_frames - 1, d_seq_lens));
         HANDLE_LAST_ERROR();
         start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
                           (d_state_buffer_next,
@@ -609,9 +577,9 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
 
     // dump alignment
     if (dump_alignment && batch_idx % dump_every == 0) {
-        write_alignment_to_file(d_state_buffer_all, d_index, index_stride,
-                                d_start_states, d_end_states, pruning, n_frames,
-                                n_seqs, n_states, batch_idx);
+        write_alignment_to_file(d_state_buffer_all, d_seq_lens, d_start_states,
+                                d_end_states, pruning, n_frames, n_seqs,
+                                n_states, batch_idx);
     }
 
     n_fill_blocks =
@@ -631,8 +599,8 @@ std::vector<torch::Tensor> fbw_cuda(std::vector<torch::Tensor> torch_inputs) {
     HANDLE_LAST_ERROR();
 
     if (dump_output && batch_idx % dump_every == 0) {
-        write_output_to_file(d_out, d_index, index_stride, pruning, n_frames,
-                             n_seqs, n_emissions, batch_idx);
+        write_output_to_file(d_out, d_seq_lens, pruning, n_frames, n_seqs,
+                             n_emissions, batch_idx);
     }
 
     device_free(d_edge_buffer);
