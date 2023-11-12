@@ -1,4 +1,5 @@
 """Install the nativeops package with `pip install .` in this dir."""
+import os
 from setuptools import setup
 
 
@@ -13,10 +14,17 @@ except ModuleNotFoundError as exc:
         "Please install PyTorch before proceeding with this installation."
     ) from exc
 
+TOP_DIR = os.path.dirname(__file__)
+NATIVE_OPS_DIR = os.path.join(TOP_DIR, "native_ops")
+
 setup(
     name="i6 Native Ops",
     ext_modules=[
-        CUDAExtension("nativeops", ["native_ops/fbw_torch.cpp", "native_ops/fbw_op.cu"])
+        CUDAExtension(
+            name="nativeops",
+            sources=["native_ops/fbw_torch.cpp", "native_ops/fbw_op.cu"],
+            include_dirs=[NATIVE_OPS_DIR],
+        )
     ],
     cmdclass={
         "build_ext": BuildExtension,
