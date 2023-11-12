@@ -401,7 +401,7 @@ void write_output_to_file(float* d_out, unsigned* d_seq_lens, float pruning, uns
 
 std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edges,
                                     torch::Tensor& weights, torch::Tensor& start_end_states,
-                                    torch::Tensor& seq_lens, torch::Tensor& state_buffer,
+                                    torch::Tensor& seq_lens, unsigned n_states,
                                     DebugOptions debug_options) {
     auto          options    = torch::TensorOptions().device(torch::kCUDA);
     torch::Tensor out        = torch::zeros_like(am_scores, options);
@@ -416,9 +416,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     assert_cmp(Ndarray_DIMS(sum_output)[0], ==, Ndarray_DIMS(am_scores)[0]);
     assert_cmp(Ndarray_DIMS(sum_output)[1], ==, Ndarray_DIMS(am_scores)[1]);
 
-    assert_cmp(Ndarray_DIMS(state_buffer)[0], ==, 2)
-
-            bool    dump_alignment = debug_options.dump_alignment;
+    bool            dump_alignment = debug_options.dump_alignment;
     bool            dump_output    = debug_options.dump_output;
     unsigned        dump_every     = debug_options.dump_every;
     static unsigned batch_idx      = 0u;
@@ -440,17 +438,12 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     unsigned* d_end_states = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(start_end_states) +
                                                          1 * Ndarray_STRIDE(start_end_states, 0));
     unsigned* d_seq_lens   = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(seq_lens));
-    float*    d_state_buffer_prev =
-            Ndarray_DEV_DATA(state_buffer) + 0 * Ndarray_STRIDE(state_buffer, 0);
-    float* d_state_buffer_next =
-            Ndarray_DEV_DATA(state_buffer) + 1 * Ndarray_STRIDE(state_buffer, 0);
-    float* d_out        = Ndarray_DEV_DATA(out);
-    float* d_sum_output = Ndarray_DEV_DATA(sum_output);
+    float*    d_out        = Ndarray_DEV_DATA(out);
+    float*    d_sum_output = Ndarray_DEV_DATA(sum_output);
 
     unsigned n_frames    = Ndarray_DIMS(am_scores)[0];
     unsigned n_seqs      = Ndarray_DIMS(am_scores)[1];
     unsigned n_emissions = Ndarray_DIMS(am_scores)[2];
-    unsigned n_states    = Ndarray_DIMS(state_buffer)[1];
     unsigned n_edges     = Ndarray_DIMS(edges)[1];
     unsigned n_threads   = 1024u;
     unsigned n_blocks    = (n_edges + n_threads - 1) / n_threads;
@@ -462,7 +455,9 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     assert_cmp(n_states, >, 0);
     cudaDeviceSynchronize();
 
-    // initialize edge buffer
+    // initialize buffers
+    float* d_state_buffer_prev = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
+    float* d_state_buffer_next = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
     float* d_edge_buffer =
             reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
     if (!d_edge_buffer) {
