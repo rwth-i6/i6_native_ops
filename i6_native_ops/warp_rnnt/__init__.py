@@ -1,6 +1,25 @@
+import os
 import torch
-import i6_native_ops.warp_rnnt._C as core
 from typing import Optional, AnyStr, Literal
+from pkg_resources import get_distribution
+
+try:
+    # Package is installed, so ops are already compiled
+    __version__ = get_distribution('i6_native_ops').version
+    import i6_native_ops.warp_rnnt.warp_rnnt_core as core
+except Exception as e:
+    # otherwise try to build locally
+    from torch.utils.cpp_extension import load
+    base_path = os.path.dirname(__file__)
+    core = load(
+        name="warp_rnnt_core",
+        sources=[
+                f"{base_path}/core.cu",
+                f"{base_path}/core_gather.cu",
+                f"{base_path}/core_compact.cu",
+                f"{base_path}/binding.cpp"
+        ]
+	)
 
 
 class RNNTLoss(torch.autograd.Function):
