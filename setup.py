@@ -17,6 +17,8 @@ except ModuleNotFoundError as exc:
 TOP_DIR = os.path.dirname(__file__)
 FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
 WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
+FAST_VITERBI_DIR = os.path.join(TOP_DIR, "i6_native_ops/fast_viterbi")
+COMMON_DIR = os.path.join(TOP_DIR, "i6_native_ops/common")
 
 setup(
     name="i6 Native Ops",
@@ -36,6 +38,14 @@ setup(
                 f"{WARP_RNNT_DIR}/core_gather.cu",
             ],
             include_dirs=[WARP_RNNT_DIR],
+        ),
+        CUDAExtension(
+            name="i6_native_ops.fast_viterbi.fast_viterbi_core",
+            sources=[
+                os.path.join(FAST_VITERBI_DIR, "binding.cpp"),
+                os.path.join(FAST_VITERBI_DIR, "core.cu"),
+            ],
+            include_dirs=[FAST_VITERBI_DIR, COMMON_DIR],
         )
     ],
     cmdclass={
