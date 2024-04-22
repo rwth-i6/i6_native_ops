@@ -27,6 +27,12 @@ setup(
             sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
             include_dirs=[FBW_DIR],
         ),
+        # intended duplication with other package name for legacy code
+        CUDAExtension(
+            name="nativeops",
+            sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
+            include_dirs=[FBW_DIR],
+        ),
         CUDAExtension(
             name="i6_native_ops.warp_rnnt.warp_rnnt_core",
             sources=[
