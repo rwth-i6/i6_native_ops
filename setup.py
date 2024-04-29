@@ -19,17 +19,11 @@ FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
 WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
 
 setup(
-    name="i6 Native Ops",
+    name="i6 native ops",
     packages=find_packages(),
     ext_modules=[
         CUDAExtension(
             name="i6_native_ops.fbw.fbw_core",
-            sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
-            include_dirs=[FBW_DIR],
-        ),
-        # intended duplication with other package name for legacy code
-        CUDAExtension(
-            name="nativeops",
             sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
             include_dirs=[FBW_DIR],
         ),
