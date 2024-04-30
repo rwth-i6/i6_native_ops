@@ -1,6 +1,6 @@
 """Install the nativeops package with `pip install .` in this dir."""
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 class MissingTorchInstallationError(Exception):
@@ -15,15 +15,27 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 TOP_DIR = os.path.dirname(__file__)
-NATIVE_OPS_DIR = os.path.join(TOP_DIR, "native_ops")
+FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
+WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
 
 setup(
-    name="i6 Native Ops",
+    name="i6 native ops",
+    packages=find_packages(),
     ext_modules=[
         CUDAExtension(
-            name="nativeops",
-            sources=["native_ops/fbw_torch.cpp", "native_ops/fbw_op.cu"],
-            include_dirs=[NATIVE_OPS_DIR],
+            name="i6_native_ops.fbw.fbw_core",
+            sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
+            include_dirs=[FBW_DIR],
+        ),
+        CUDAExtension(
+            name="i6_native_ops.warp_rnnt.warp_rnnt_core",
+            sources=[
+                f"{WARP_RNNT_DIR}/binding.cpp",
+                f"{WARP_RNNT_DIR}/core_compact.cu",
+                f"{WARP_RNNT_DIR}/core.cu",
+                f"{WARP_RNNT_DIR}/core_gather.cu",
+            ],
+            include_dirs=[WARP_RNNT_DIR],
         )
     ],
     cmdclass={

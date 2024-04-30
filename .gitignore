@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# History files
+.history.*
+
+
+# python
+build/
+dist/
+__pycache__
+*.egg-info
