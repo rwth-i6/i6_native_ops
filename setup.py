@@ -21,7 +21,7 @@ FAST_VITERBI_DIR = os.path.join(TOP_DIR, "i6_native_ops/fast_viterbi")
 COMMON_DIR = os.path.join(TOP_DIR, "i6_native_ops/common")
 
 setup(
-    name="i6 Native Ops",
+    name="i6 native ops",
     packages=find_packages(),
     ext_modules=[
         CUDAExtension(

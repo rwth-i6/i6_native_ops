@@ -34,7 +34,9 @@
 # History files
 .history.*
 
-# Python files
-**/__pycache__
-build
+
+# python
+build/
+dist/
+__pycache__
 *.egg-info
