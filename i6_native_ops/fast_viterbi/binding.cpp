@@ -31,4 +31,3 @@ std::vector<torch::Tensor> fast_viterbi(torch::Tensor& am_scores, torch::Tensor&
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("fast_viterbi", &fast_viterbi, "Fast Viterbi CUDA routine");
 }
-
