@@ -189,4 +189,4 @@ static inline void device_free(void* ptr) {
     cudaFree(ptr);
 }
 
-#endif // _COMMON_DEFINITIONS_H
+#endif  // _COMMON_DEFINITIONS_H
