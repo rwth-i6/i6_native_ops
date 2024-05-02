@@ -10,7 +10,7 @@
 #include <math_constants.h>
 #include <torch/extension.h>
 
-#include <../common/definitions.h>
+#include <../common/returnn_definitions.h>
 
 struct __attribute__((__packed__)) IdxAndVal {
     int   idx;

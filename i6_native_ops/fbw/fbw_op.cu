@@ -11,7 +11,7 @@
 #include <torch/extension.h>
 
 #include <DebugOptions.h>
-#include <../common/definitions.h>
+#include <../common/returnn_definitions.h>
 
 
 DEF_KERNEL

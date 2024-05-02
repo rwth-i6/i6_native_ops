@@ -1,5 +1,5 @@
-#ifndef _COMMON_DEFINITIONS_H
-#define _COMMON_DEFINITIONS_H
+#ifndef _COMMON_RETURNN_DEFINITIONS_H
+#define _COMMON_RETURNN_DEFINITIONS_H
 
 #include <fstream>
 #include <iostream>
@@ -189,4 +189,4 @@ static inline void device_free(void* ptr) {
     cudaFree(ptr);
 }
 
-#endif  // _COMMON_DEFINITIONS_H
+#endif  // _COMMON_RETURNN_DEFINITIONS_H
