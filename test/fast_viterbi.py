@@ -1,6 +1,5 @@
 import unittest
 import torch
-import torch.nn.functional as F
 
 from i6_native_ops.fast_viterbi import align_viterbi
 

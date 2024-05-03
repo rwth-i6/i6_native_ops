@@ -39,7 +39,7 @@ def align_viterbi(
     """
     num_states, edge_tensor, weight_tensor, start_end_states = fsa
     alignment, scores = core.fast_viterbi(
-        am_scores, edge_tensor, weight_tensor,
+        log_probs, edge_tensor, weight_tensor,
         start_end_states, seq_lens, num_states
     )
     return alignment, scores
