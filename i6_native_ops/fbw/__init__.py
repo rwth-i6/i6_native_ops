@@ -1,3 +1,4 @@
+import os
 import torch  # needed to find pytorch specific libs
 from pkg_resources import get_distribution
 from typing import Tuple
