@@ -52,7 +52,7 @@ def fbw_loss(
     """ 
     Computes negative log likelihood of an emission model given an HMM finite state automaton.
     The corresponding gradient with respect to the emission model is automatically backpropagated.
-    :param log_probs: log probabilities of emission model as a (T, B, F)
+    :param log_probs: log probabilities of emission model as a [B, T, F] tensor
     :param fsa: weighted finite state automaton as a tuple consisting of:
         * number of states
         * a (4, E) tensor of integers specifying where each column consists of
@@ -63,6 +63,6 @@ def fbw_loss(
     :param seq_lens: (B,) tensor consisting of the sequence lengths
     :return: (B,) tensor of loss values
     """
-    neg_log_probs = log_probs.neg()
+    neg_log_probs = log_probs.neg().transpose(0, 1).contiguous() # [T, B, F]
     loss = FastBaumWelchLoss.apply(neg_log_probs, fsa, seq_lens)
     return loss
