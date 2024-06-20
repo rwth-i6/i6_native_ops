@@ -26,7 +26,7 @@ def align_viterbi(
     seq_lens: torch.IntTensor
 ) -> Tuple[torch.IntTensor, torch.FloatTensor]:
     """ Find best path with Viterbi algorithm.
-    :param log_probs: log probabilities of emission model as a (T, B, F)
+    :param log_probs: log probabilities of emission model as a (B, T, F)
     :param fsa: weighted finite state automaton as a tuple consisting of:
         * number of states
         * a (4, E) tensor of integers specifying where each column consists of
@@ -37,9 +37,11 @@ def align_viterbi(
     :param seq_lens: (B,) tensor consisting of the sequence lengths
     :return: a sparse (B, T) tensor of the best sequences and a (B,) tensor of scores
     """
+    log_probs = log_probs.transpose(0, 1).contiguous()
     num_states, edge_tensor, weight_tensor, start_end_states = fsa
     alignment, scores = core.fast_viterbi(
         log_probs, edge_tensor, weight_tensor,
         start_end_states, seq_lens, num_states
     )
-    return alignment, scores
+    alignment_batch_major = alignment.transpose(0, 1).contiguous()
+    return alignment_batch_major, scores
