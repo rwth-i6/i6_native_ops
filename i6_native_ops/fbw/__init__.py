@@ -48,7 +48,7 @@ def fbw_loss(
     log_probs: torch.FloatTensor,
     fsa: Tuple[int, torch.IntTensor, torch.FloatTensor, torch.IntTensor],
     seq_lens: torch.IntTensor
-) -> Tuple[torch.IntTensor, torch.FloatTensor]:
+) -> torch.FloatTensor:
     """ 
     Computes negative log likelihood of an emission model given an HMM finite state automaton.
     The corresponding gradient with respect to the emission model is automatically backpropagated.
