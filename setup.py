@@ -1,4 +1,5 @@
 """Install the nativeops package with `pip install .` in this dir."""
+
 import os
 from setuptools import setup, find_packages
 
@@ -17,6 +18,7 @@ except ModuleNotFoundError as exc:
 TOP_DIR = os.path.dirname(__file__)
 FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
 WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
+MONOTONIC_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/monotonic_rnnt")
 
 setup(
     name="i6 native ops",
@@ -36,7 +38,13 @@ setup(
                 f"{WARP_RNNT_DIR}/core_gather.cu",
             ],
             include_dirs=[WARP_RNNT_DIR],
-        )
+        ),
+        CUDAExtension(
+            name="i6_native_ops.monotonic_rnnt.monotonic_rnnt_core",
+            sources=[f"{MONOTONIC_RNNT_DIR}/monotonic_rnnt.cu"],
+            include_dirs=[f"{MONOTONIC_RNNT_DIR}/include"],
+            extra_compile_args=["-DRNNT_ENABLE_GPU"],
+        ),
     ],
     cmdclass={
         "build_ext": BuildExtension,
