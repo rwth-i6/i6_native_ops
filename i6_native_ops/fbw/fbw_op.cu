@@ -85,7 +85,7 @@ static void _cudaHandleError(cudaError_t err, const char* file, int line) {
 }
 
 static void _cudaHandleError(cublasStatus_t status, const char* file, int line) {
-    TORCH_CHECK(status == CUBLAS_STATUS_SUCCESS, "NativeOp: cuBLAS runtime error: ", cudaGetErrorString(err), " in ", file, " at line ", line);
+    TORCH_CHECK(status == CUBLAS_STATUS_SUCCESS, "NativeOp: cuBLAS runtime error: ", _cudaGetErrorEnum(status), " in ", file, " at line ", line);
 }
 
 #define HANDLE_ERROR(status) (_cudaHandleError(status, __FILE__, __LINE__))
