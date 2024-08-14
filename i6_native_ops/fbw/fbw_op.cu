@@ -81,19 +81,11 @@ static const char* _cudaGetErrorEnum(cublasStatus_t error) {
 }
 
 static void _cudaHandleError(cudaError_t err, const char* file, int line) {
-    if (err != cudaSuccess) {
-        printf("NativeOp: CUDA runtime error: '%s' in %s at line %d\n", cudaGetErrorString(err),
-               file, line);
-        exit(EXIT_FAILURE);
-    }
+    TORCH_CHECK(err == cudaSuccess, "NativeOp: CUDA runtime error: ", cudaGetErrorString(err), " in ", file, " at line ", line);
 }
 
 static void _cudaHandleError(cublasStatus_t status, const char* file, int line) {
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        printf("NativeOp: cuBLAS runtime error: '%s' in %s at line %d\n", _cudaGetErrorEnum(status),
-               file, line);
-        exit(EXIT_FAILURE);
-    }
+    TORCH_CHECK(err == cudaSuccess, "NativeOp: cuBLAS runtime error: ", cudaGetErrorString(err), " in ", file, " at line ", line);
 }
 
 #define HANDLE_ERROR(status) (_cudaHandleError(status, __FILE__, __LINE__))
