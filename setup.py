@@ -42,8 +42,8 @@ setup(
         CUDAExtension(
             name="i6_native_ops.fast_viterbi.fast_viterbi_core",
             sources=[
-                os.path.join(FAST_VITERBI_DIR, "binding.cpp"),
-                os.path.join(FAST_VITERBI_DIR, "core.cu"),
+                f"{FAST_VITERBI_DIR}/binding.cpp",
+                f"{FAST_VITERBI_DIR}/core.cu",
             ],
             include_dirs=[FAST_VITERBI_DIR, COMMON_DIR],
         )
