@@ -40,7 +40,7 @@ setup(
             include_dirs=[WARP_RNNT_DIR],
         ),
         CUDAExtension(
-            name="i6_native_ops.monotonic_rnnt.monotonic_rnnt_core",
+            name="i6_native_ops.monotonic_rnnt.core",
             sources=[f"{MONOTONIC_RNNT_DIR}/monotonic_rnnt.cu"],
             include_dirs=[f"{MONOTONIC_RNNT_DIR}/include"],
             extra_compile_args=["-DRNNT_ENABLE_GPU"],
