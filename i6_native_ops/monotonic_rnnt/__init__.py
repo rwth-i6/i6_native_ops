@@ -137,30 +137,52 @@ def monotonic_rnnt_loss(
     max_shift_from_alignment: int = 0,
     blank_label: int = 0,
 ) -> torch.Tensor:
-    """Computes the RNNT loss between a sequence of activations and a
-    ground truth labeling.
+    """
+    Computes the RNNT loss between a sequence of activations and a ground truth labeling.
+
     Args:
-        acts:                      A packed 2-D Tensor of logits*. The dimensions should be
-                                   (T_1*(S_1+1) + T_2*(S_2+1) + ... + T_B*(S_B+1), V), where B is the minibatch index,
-                                   T_i and S_i are the lengths of feature- and label-sequence i respectively and V indexes
-                                   over activations for each symbol in the alphabet. The packing is assumed to be done in
-                                   row-major order, i.e. the order of activations for sample b of the batch should be:
-                                   (z_{1,1}, .., z_{1,S_b+1},
-                                   z_{2, 1}, .., z_{2, S_b+1}, ..,
-                                   z_{T_1,1}, .., z_{T_b, S_b+1}) with all samples occuring consecutively.
-        labels:                    A 2-D Tensor of ints with shape [B, max(S_b)], a padded label sequences.
-        input_lengths:             A 1-D Tensor of ints, [T_1, T_2, ..., T_B], the number of time steps for each sequence in the
-                                   minibatch.
-        label_lengths:             A 1-D Tensor of ints, [S_1, S_2, ..., S_B], the length of each label sequence for each example
-                                   in the minibatch.
-        alignment:                 Optional 2-D Tensor of ints with shape [B, max(T_b)]. Grid for loss computation is restricted to
-                                   a region around this alignment given as a max allowed left and right frame-shift.
-        max_shift_from_alignment:  Max left/right shift for alignment restriction. If 0 this is equivalent to Viterbi training.
-        blank_label:     the label value/index that the RNNT calculation should use as the blank label
+        acts:
+            A packed 2-D Tensor of logits. The dimensions should be
+            (T_1*(S_1+1) + T_2*(S_2+1) + ... + T_B*(S_B+1), V), where:
+              - B is the minibatch index
+              - T_i and S_i are the lengths of feature- and label-sequence i respectively
+              - V indexes over activations for each symbol in the alphabet
+            The packing is assumed to be done in row-major order. The order of activations for sample `b` of the batch should be:
+
+            ```
+            (z_{1,1}, ..., z_{1,S_b+1},
+            z_{2, 1}, ..., z_{2, S_b+1}, ...,
+            z_{T_1,1}, ..., z_{T_b, S_b+1})
+            ```
+
+            with all samples occuring consecutively.
+
+        labels:
+            A 2-D Tensor of ints with shape [B, max(S_b)], representing padded label sequences.
+
+        input_lengths:
+            A 1-D Tensor of ints, [T_1, T_2, ..., T_B], representing the number of time steps
+            for each sequence in the minibatch.
+
+        label_lengths:
+            A 1-D Tensor of ints, [S_1, S_2, ..., S_B], representing the length of each label sequence
+            for each sequence in the minibatch.
+
+        alignment:
+            Optional 2-D Tensor of ints with shape [B, max(T_b)]. Grid for loss computation is restricted to
+            a region around this alignment given as a max allowed left and right frame-shift.
+
+        max_shift_from_alignment:
+            Max left/right shift for alignment restriction. If 0 this is equivalent to Viterbi training.
+
+        blank_label:
+            The label value/index that the RNNT calculation should use as the blank label
     Returns:
         1-D float Tensor of shape [B], the cost of each example in the minibatch
         (as negative log probabilities).
-    * This class performs the softmax operation internally.
+
+    Note:
+        This class performs the softmax operation internally.
     """
 
     result = MonotonicRNNTFunction.apply(
