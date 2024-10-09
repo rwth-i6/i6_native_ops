@@ -1,4 +1,5 @@
 """Install the nativeops package with `pip install .` in this dir."""
+
 import os
 from setuptools import setup, find_packages
 
@@ -18,6 +19,7 @@ TOP_DIR = os.path.dirname(__file__)
 FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
 WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
 FAST_VITERBI_DIR = os.path.join(TOP_DIR, "i6_native_ops/fast_viterbi")
+MONOTONIC_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/monotonic_rnnt")
 COMMON_DIR = os.path.join(TOP_DIR, "i6_native_ops/common")
 
 setup(
@@ -46,7 +48,13 @@ setup(
                 f"{FAST_VITERBI_DIR}/core.cu",
             ],
             include_dirs=[FAST_VITERBI_DIR, COMMON_DIR],
-        )
+        ),
+        CUDAExtension(
+            name="i6_native_ops.monotonic_rnnt.monotonic_rnnt_core",
+            sources=[f"{MONOTONIC_RNNT_DIR}/monotonic_rnnt.cu"],
+            include_dirs=[f"{MONOTONIC_RNNT_DIR}/include"],
+            extra_compile_args=["-DRNNT_ENABLE_GPU"],
+        ),
     ],
     cmdclass={
         "build_ext": BuildExtension,
