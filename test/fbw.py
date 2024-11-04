@@ -15,7 +15,7 @@ class TestFastBaumWelch(unittest.TestCase):
                     [0.1, 0.9],
                 ], device="cuda", dtype=torch.float32,
                 requires_grad=True)
-            .unsqueeze(1)
+            .unsqueeze(0)
             .log()
         )
         edges = (

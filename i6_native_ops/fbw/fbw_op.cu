@@ -558,6 +558,8 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     }
 
     device_free(d_edge_buffer);
+    device_free(d_state_buffer_prev);
+    device_free(d_state_buffer_next);
     if (d_state_buffer_all != NULL) {
         device_free(d_state_buffer_all);
     }
