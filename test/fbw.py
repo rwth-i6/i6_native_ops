@@ -28,8 +28,8 @@ class TestFastBaumWelch(unittest.TestCase):
                     # from, to, emission_idx, sequence_idx
                     [0, 0, 0, 0],  # loop from 0 to 0, emit label 0
                     [0, 1, 0, 0],  # forward from 0 to 1, emit 0
-                    [1, 1, 1, 0],
-                ],  # loop from 1 to 1, emit 1
+                    [1, 1, 1, 0],  # loop from 1 to 1, emit 1
+                ],
                 device="cuda",
                 dtype=torch.int32,
             )
