@@ -90,14 +90,22 @@ static void _cudaHandleError(cublasStatus_t status, const char* file, int line) 
 #define HANDLE_ERROR(status) (_cudaHandleError(status, __FILE__, __LINE__))
 #define HANDLE_LAST_ERROR() (HANDLE_ERROR(cudaGetLastError()))
 
-long Ndarray_get_n_total_elements(Ndarray& a) {
+#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_TYPE(x, type) TORCH_CHECK(x.dtype() == type, "Expected " #x " to contain elements of type ", type, ", but got type ", x.dtype())
+#define CHECK_INPUT(x, type) \
+    CHECK_CUDA(x);           \
+    CHECK_CONTIGUOUS(x);     \
+    CHECK_TYPE(x, type)
+
+inline long Ndarray_get_n_total_elements(Ndarray& a) {
     long c = 1;
     for (long i = 0; i < Ndarray_NDIM(a); ++i)
         c *= Ndarray_DIMS(a)[i];
     return c;
 }
 
-void _Ndarray_set_zero(Ndarray& a) {
+inline void _Ndarray_set_zero(Ndarray& a) {
     long size = Ndarray_get_n_total_elements(a) * Ndarray_dtype_size(a);
     Ndarray_memset(Ndarray_DEV_DATA(a), 0, size);
 }
@@ -120,55 +128,55 @@ DEV_FUNC HOST_FUNC const char* _format_for_type(const T&) {
     assert(0);
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const char&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const char&) {
     return "%c";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned char&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned char&) {
     return "%u";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const short&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const short&) {
     return "%hi";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned short&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned short&) {
     return "%hu";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const int&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const int&) {
     return "%i";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned int&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned int&) {
     return "%u";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const long&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const long&) {
     return "%li";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned long&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned long&) {
     return "%lu";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const long long&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const long long&) {
     return "%lli";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned long long&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const unsigned long long&) {
     return "%llu";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const float&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const float&) {
     return "%f";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const double&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const double&) {
     return "%f";
 }
 template<>
-DEV_FUNC HOST_FUNC const char* _format_for_type(const long double&) {
+inline DEV_FUNC HOST_FUNC const char* _format_for_type(const long double&) {
     return "%Lf";
 }
 
