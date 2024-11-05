@@ -460,7 +460,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     float* d_state_buffer_next = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
     float* d_edge_buffer =
             reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
-    if (!d_edge_buffer) {
+    if (!d_edge_buffer || !d_state_buffer_prev || !d_state_buffer_next) {
         HANDLE_LAST_ERROR();
         abort();
     }  // error should have been set in device_malloc
