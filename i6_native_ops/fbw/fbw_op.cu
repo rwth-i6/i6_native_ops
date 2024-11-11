@@ -279,7 +279,6 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     float* d_state_buffer_prev = Ndarray_DEV_DATA(state_buffer_prev);
     float* d_state_buffer_next = Ndarray_DEV_DATA(state_buffer_next);
     float* d_edge_buffer = Ndarray_DEV_DATA(edge_buffer);
-    //auto edge_buffer_stride = Ndarray_STRIDE(edge_buffer, 0);
 
     // initialize the state buffer
     state_buffer_prev.fill_(std::numeric_limits<float>::infinity());
@@ -287,15 +286,11 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     HANDLE_LAST_ERROR();
 
     // initialize full state buffer (only used to dump the alignment)
+    torch::Tensor state_buffer_all;
     float* d_state_buffer_all = NULL;
     if (dump_alignment && batch_idx % dump_every == 0) {
-        // todo remove malloc
-        d_state_buffer_all =
-                reinterpret_cast<float*>(device_malloc(n_states * (n_frames + 1u) * sizeof(float)));
-        if (!d_state_buffer_all) {
-            HANDLE_LAST_ERROR();
-            abort();
-        }  // error should have been set in device_malloc
+        state_buffer_all = torch::empty({n_frames + 1u, n_states}, options);
+        d_state_buffer_all = Ndarray_DEV_DATA(state_buffer_all);
         Ndarray_memcpy(d_state_buffer_all, d_state_buffer_prev, n_states * sizeof(float));
         HANDLE_LAST_ERROR();
     }
@@ -359,9 +354,6 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
         write_output_to_file(d_out, d_seq_lens, pruning, n_frames, n_seqs, n_emissions, batch_idx);
     }
 
-    if (d_state_buffer_all != NULL) {
-        device_free(d_state_buffer_all);
-    }
     batch_idx++;
 
     return {out, sum_output};
