@@ -21,14 +21,6 @@ void set_start_states(float* states, unsigned* start_states) {
 }
 
 DEF_KERNEL
-void fill_array(float* array, float value, unsigned size) {
-    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < size) {
-        array[idx] = value;
-    }
-}
-
-DEF_KERNEL
 void remove_inf(float* array, unsigned size) {
     unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
@@ -227,7 +219,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
                                     torch::Tensor& weights, torch::Tensor& start_end_states,
                                     torch::Tensor& seq_lens, unsigned n_states,
                                     DebugOptions debug_options) {
-    auto          options    = torch::TensorOptions().device(torch::kCUDA);
+    auto          options    = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
     torch::Tensor out        = torch::zeros_like(am_scores, options);
     torch::Tensor sum_output = torch::zeros({am_scores.size(0), am_scores.size(1)}, options);
 
@@ -280,30 +272,24 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     cudaDeviceSynchronize();
 
     // initialize buffers
-    float* d_state_buffer_prev = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
-    float* d_state_buffer_next = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
-    float* d_edge_buffer =
-            reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
-    if (!d_edge_buffer || !d_state_buffer_prev || !d_state_buffer_next) {
-        HANDLE_LAST_ERROR();
-        abort();
-    }  // error should have been set in device_malloc
-    unsigned n_fill_blocks = (n_edges * n_frames + n_threads - 1u) / n_threads;
-    start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
-                      (d_edge_buffer, 0.0, n_edges * n_frames));
-    HANDLE_LAST_ERROR();
+    torch::Tensor state_buffer_prev = torch::empty({n_states}, options);
+    torch::Tensor state_buffer_next = torch::empty({n_states}, options);
+    torch::Tensor edge_buffer = torch::zeros({n_frames, n_edges}, options);
+
+    float* d_state_buffer_prev = Ndarray_DEV_DATA(state_buffer_prev);
+    float* d_state_buffer_next = Ndarray_DEV_DATA(state_buffer_next);
+    float* d_edge_buffer = Ndarray_DEV_DATA(edge_buffer);
+    //auto edge_buffer_stride = Ndarray_STRIDE(edge_buffer, 0);
 
     // initialize the state buffer
-    n_fill_blocks = (n_states + n_threads - 1u) / n_threads;
-    start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
-                      (d_state_buffer_prev, std::numeric_limits<float>::infinity(), n_states));
-    HANDLE_LAST_ERROR();
+    state_buffer_prev.fill_(std::numeric_limits<float>::infinity());
     start_dev_kernel2(set_start_states, 1, n_seqs, 0, (d_state_buffer_prev, d_start_states));
     HANDLE_LAST_ERROR();
 
     // initialize full state buffer (only used to dump the alignment)
     float* d_state_buffer_all = NULL;
     if (dump_alignment && batch_idx % dump_every == 0) {
+        // todo remove malloc
         d_state_buffer_all =
                 reinterpret_cast<float*>(device_malloc(n_states * (n_frames + 1u) * sizeof(float)));
         if (!d_state_buffer_all) {
@@ -316,9 +302,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
 
     // fwd pass
     for (unsigned t = 0u; t < n_frames; t++) {
-        start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
-                          (d_state_buffer_next, std::numeric_limits<float>::infinity(), n_states));
-        HANDLE_LAST_ERROR();
+        state_buffer_next.fill_(std::numeric_limits<float>::infinity());
         start_dev_kernel2(next_frame, n_blocks, n_threads, 0,
                           (true, n_edges, sequence_stride, d_sequence_idxs, d_from, d_to, d_weights,
                            d_emission_idxs, d_state_buffer_prev, d_state_buffer_next,
@@ -330,19 +314,16 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
             HANDLE_LAST_ERROR();
         }
         std::swap(d_state_buffer_prev, d_state_buffer_next);
+        std::swap(state_buffer_prev, state_buffer_next);
     }
 
     // bwd pass
-    start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
-                      (d_state_buffer_prev, std::numeric_limits<float>::infinity(), n_states));
-    HANDLE_LAST_ERROR();
+    state_buffer_prev.fill_(std::numeric_limits<float>::infinity());
     for (unsigned t = n_frames; t > 0; t--) {
         start_dev_kernel2(init_bwd_state_buffer, 1, n_seqs, 0,
                           (d_state_buffer_prev, d_end_states, t - 1, n_frames - 1, d_seq_lens));
         HANDLE_LAST_ERROR();
-        start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
-                          (d_state_buffer_next, std::numeric_limits<float>::infinity(), n_states));
-        HANDLE_LAST_ERROR();
+        state_buffer_next.fill_(std::numeric_limits<float>::infinity());
         start_dev_kernel2(
                 next_frame, n_blocks, n_threads, 0,
                 (false, n_edges, sequence_stride, d_sequence_idxs, d_to, d_from, d_weights,
@@ -350,6 +331,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
                  d_am_scores + (t - 1) * frame_stride, d_edge_buffer + (t - 1) * n_edges));
         HANDLE_LAST_ERROR();
         std::swap(d_state_buffer_prev, d_state_buffer_next);
+        std::swap(state_buffer_prev, state_buffer_next);
     }
 
     // normalize at each time frame
@@ -363,11 +345,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
                                 pruning, n_frames, n_seqs, n_states, batch_idx);
     }
 
-    n_fill_blocks = (n_frames * n_seqs * n_emissions + n_threads - 1u) / n_threads;
-    start_dev_kernel2(
-            fill_array, n_fill_blocks, n_threads, 0,
-            (d_out, std::numeric_limits<float>::infinity(), n_frames * n_seqs * n_emissions));
-    HANDLE_LAST_ERROR();
+    out.fill_(std::numeric_limits<float>::infinity());
 
     frame_stride    = Ndarray_STRIDE(out, 0);
     sequence_stride = Ndarray_STRIDE(out, 1);
@@ -381,9 +359,6 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
         write_output_to_file(d_out, d_seq_lens, pruning, n_frames, n_seqs, n_emissions, batch_idx);
     }
 
-    device_free(d_edge_buffer);
-    device_free(d_state_buffer_prev);
-    device_free(d_state_buffer_next);
     if (d_state_buffer_all != NULL) {
         device_free(d_state_buffer_all);
     }
