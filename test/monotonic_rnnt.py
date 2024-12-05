@@ -67,6 +67,45 @@ class TestCostAndGrad(unittest.TestCase):
         self.assertTrue(torch.allclose(grads, expected_grads, atol=1e-02))
 
 
+class TestDatatypes(unittest.TestCase):
+    def test_int64_labels_lengths(self) -> None:
+        acts = torch.tensor(
+            [
+                [0.6, 0.3, 0.1],
+                [0.7, 0.1, 0.2],
+                [0.5, 0.1, 0.4],
+                [0.5, 0.4, 0.1],
+                [0.5, 0.1, 0.4],
+                [0.8, 0.1, 0.1],
+                [0.4, 0.3, 0.3],
+                [0.5, 0.1, 0.4],
+                [0.7, 0.2, 0.1],
+                [0.8, 0.1, 0.1],
+                [0.3, 0.1, 0.6],
+                [0.8, 0.1, 0.1],
+            ],
+            dtype=torch.float32,
+        )
+        acts = torch.log(acts)  # type: ignore
+
+        labels = torch.tensor([[1, 2]], dtype=torch.int64)
+        lengths = torch.tensor([4], dtype=torch.int64)
+        label_lengths = torch.tensor([2], dtype=torch.int64)
+
+        acts.requires_grad_(True)
+
+        costs = monotonic_rnnt_loss(
+            acts=acts,
+            labels=labels,
+            input_lengths=lengths,
+            label_lengths=label_lengths,
+            blank_label=0,
+        )
+
+        cost = costs.detach().numpy()[0]
+        self.assertLess(abs(cost - 1.01), 1e-02)
+
+
 class TestAlignmentRestriction(unittest.TestCase):
     def test_alignment_restriction(self) -> None:
         acts = torch.tensor(
