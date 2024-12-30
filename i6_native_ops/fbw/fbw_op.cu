@@ -282,8 +282,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     // initialize buffers
     float* d_state_buffer_prev = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
     float* d_state_buffer_next = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
-    float* d_edge_buffer =
-            reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
+    float* d_edge_buffer = reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
     if (!d_edge_buffer) {
         HANDLE_LAST_ERROR();
         abort();
