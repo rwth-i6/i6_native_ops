@@ -45,5 +45,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             .def_readwrite("dump_output", &DebugOptionsV2::dump_output)
             .def_readwrite("dump_every", &DebugOptionsV2::dump_every)
             .def_readwrite("pruning", &DebugOptionsV2::pruning)
-            .def_readwrite("explicit_merge", &DebugOptionsV2::explicit_merge);
+            .def_readwrite("explicit_merge", &DebugOptionsV2::explicit_merge)
+            .def_readwrite("per_frame_norm", &DebugOptionsV2::per_frame_norm);
 }

@@ -7,7 +7,8 @@ typedef struct {
     bool     dump_output    = false;
     unsigned dump_every     = 40u;
     float    pruning        = 20.f;
-    unsigned explicit_merge = false;
+    bool     explicit_merge = false;
+    bool     per_frame_norm = false;
 } DebugOptionsV2;
 
 #endif  // _DEBUG_OPTIONS_H
