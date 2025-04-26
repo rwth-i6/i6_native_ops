@@ -41,7 +41,8 @@ class FastBaumWelchLoss(torch.autograd.Function):
     def backward(ctx, grad_loss):
         # negative log prob -> prob
         grad = ctx.saved_tensors[0].neg().exp()
-        return grad, None, None
+        final_grad = grad_loss * grad
+        return final_grad, None, None
 
 
 def fbw_loss(
