@@ -66,4 +66,4 @@ def fbw_loss(
     """
     neg_log_probs = log_probs.neg().transpose(0, 1).contiguous() # [T, B, F]
     loss = FastBaumWelchLoss.apply(neg_log_probs, fsa, seq_lens)
-    return loss
+    return loss[0]
