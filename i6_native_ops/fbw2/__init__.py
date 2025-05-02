@@ -1,3 +1,5 @@
+__all__ = ["DebugOptionsV2", "FastBaumWelch2Loss", "fbw2_loss"]
+
 import os
 import torch  # needed to find pytorch specific libs
 from pkg_resources import get_distribution
@@ -6,39 +8,40 @@ from typing import Tuple
 try:
     # Package is installed, so ops are already compiled
     __version__ = get_distribution("i6_native_ops").version
-    from .fbw_core import DebugOptions, fbw
+    from .fbw2_core import DebugOptionsV2, fbw2
 except Exception:
     # otherwise try to build locally
     from torch.utils.cpp_extension import load
 
     base_path = os.path.dirname(__file__)
     core = load(
-        name="fbw_core",
+        name="fbw2_core",
         sources=[
-            os.path.join(base_path, "fbw_torch.cpp"),
-            os.path.join(base_path, "fbw_op.cu"),
+            os.path.join(base_path, "fbw2_torch.cpp"),
+            os.path.join(base_path, "fbw2_op.cu"),
         ],
         extra_include_paths=[base_path, os.path.join(base_path, "..", "common")],
     )
-    DebugOptions = core.DebugOptions
-    fbw = core.fbw
+    DebugOptionsV2 = core.DebugOptionsV2
+    fbw2 = core.fbw2
 
 
-class FastBaumWelchLoss(torch.autograd.Function):
+class FastBaumWelch2Loss(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, am_scores, fsa, seq_lens, debug_options=None):
-        num_states, edge_tensor, weight_tensor, start_end_states = fsa
+    def forward(ctx, am_scores, fsa, seq_lens, debug_opts=None):
+        num_states, num_edges, edge_tensor, weight_tensor, start_end_states = fsa
 
-        debug_options = debug_options or DebugOptions()
-
-        grad, loss = fbw(
+        if debug_opts is None:
+            debug_opts = DebugOptionsV2()
+        grad, loss = fbw2(
+            num_states,
+            num_edges,
+            seq_lens,
             am_scores,
             edge_tensor,
             weight_tensor,
             start_end_states,
-            seq_lens,
-            int(num_states),
-            debug_options,
+            debug_opts,
         )
         ctx.save_for_backward(grad)
         return loss
@@ -47,12 +50,21 @@ class FastBaumWelchLoss(torch.autograd.Function):
     def backward(ctx, grad_loss):
         # negative log prob -> prob
         grad = ctx.saved_tensors[0].neg().exp()
-        return grad, None, None, None
+        # match [B] with [T, B, F]
+        grad_loss = grad_loss.unsqueeze(0).unsqueeze(-1)
+        final_grad = grad_loss * grad
+        return final_grad, None, None, None
 
 
-def fbw_loss(
+def fbw2_loss(
     log_probs: torch.FloatTensor,
-    fsa: Tuple[int, torch.IntTensor, torch.FloatTensor, torch.IntTensor],
+    fsa: Tuple[
+        torch.IntTensor,
+        torch.IntTensor,
+        torch.IntTensor,
+        torch.FloatTensor,
+        torch.IntTensor,
+    ],
     seq_lens: torch.IntTensor,
 ) -> torch.FloatTensor:
     """
@@ -60,7 +72,8 @@ def fbw_loss(
     The corresponding gradient with respect to the emission model is automatically backpropagated.
     :param log_probs: log probabilities of emission model as a [B, T, F] tensor
     :param fsa: weighted finite state automaton as a tuple consisting of:
-        * number of states
+        * a (B) tensor with number of states per automaton
+        * a (B) tensor with number of edges per automaton
         * a (4, E) tensor of integers specifying where each column consists of
             origin state, target state, emission idx and the index of the sequence
         * a (E,) tensor of floats holding the weight of each edge
@@ -70,5 +83,5 @@ def fbw_loss(
     :return: (B,) tensor of loss values
     """
     neg_log_probs = log_probs.neg().transpose(0, 1).contiguous()  # [T, B, F]
-    loss = FastBaumWelchLoss.apply(neg_log_probs, fsa, seq_lens)
+    loss = FastBaumWelch2Loss.apply(neg_log_probs, fsa, seq_lens)
     return loss

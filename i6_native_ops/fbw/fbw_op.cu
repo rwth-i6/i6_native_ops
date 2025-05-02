@@ -29,6 +29,14 @@ void fill_array(float* array, float value, unsigned size) {
 }
 
 DEF_KERNEL
+void sum_vector(float* a, float const* b, unsigned size) {
+    unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        a[idx] += b[idx];
+    }
+}
+
+DEF_KERNEL
 void remove_inf(float* array, unsigned size) {
     unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < size) {
@@ -152,7 +160,8 @@ void compute_result(float* edge_buffer, float* out, unsigned* emission_idxs,
     atomic_prob_add(out + frame * frame_stride + seq_idx * seq_stride + emission_idx, score);
 }
 
-void write_alignment_to_file(float* d_state_buffer, unsigned* d_seq_lens, unsigned* d_start_states,
+void write_alignment_to_file(std::string const& prefix, bool norm,
+                             float* d_state_buffer, unsigned* d_seq_lens, unsigned* d_start_states,
                              unsigned* d_end_states, float pruning, unsigned n_frames,
                              unsigned n_seqs, unsigned n_states, unsigned batch_idx) {
     std::vector<float>    state_buffer((n_frames + 1u) * n_states);
@@ -171,18 +180,21 @@ void write_alignment_to_file(float* d_state_buffer, unsigned* d_seq_lens, unsign
 
     for (unsigned seq = 0u; seq < n_seqs; seq++) {
         std::stringstream filename;
-        filename << "alignment.dump." << batch_idx << '.' << seq;
+        filename << prefix << batch_idx << '.' << seq;
         std::ofstream out(filename.str().c_str(), std::ios::out | std::ios::trunc);
-        for (unsigned t = 0u; t < n_frames; t++) {
-            if (t > 0u && t >= seq_lens[seq]) {
+        for (unsigned t = 0u; t <= n_frames; t++) {
+            if (t > 0u && t > seq_lens[seq]) {
                 break;
             }
-            float sum = std::numeric_limits<float>::infinity();
-            for (unsigned s = start_states[seq]; s <= end_states[seq]; s++) {
-                const float val  = state_buffer[t * n_states + s];
-                float       diff = val - sum;
-                if (!isnan(diff)) {
-                    sum = -log1p(exp(-abs(diff))) + fminf(sum, val);
+            float sum = 0.0;
+            if (norm) {
+                sum = std::numeric_limits<float>::infinity();
+                for (unsigned s = start_states[seq]; s <= end_states[seq]; s++) {
+                    const float val  = state_buffer[t * n_states + s];
+                    float       diff = val - sum;
+                    if (!isnan(diff)) {
+                        sum = -log1p(exp(-abs(diff))) + fminf(sum, val);
+                    }
                 }
             }
             for (unsigned s = start_states[seq]; s <= end_states[seq]; s++) {
@@ -282,8 +294,7 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
     // initialize buffers
     float* d_state_buffer_prev = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
     float* d_state_buffer_next = reinterpret_cast<float*>(device_malloc(n_states * sizeof(float)));
-    float* d_edge_buffer =
-            reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
+    float* d_edge_buffer = reinterpret_cast<float*>(device_malloc(n_edges * n_frames * sizeof(float)));
     if (!d_edge_buffer || !d_state_buffer_prev || !d_state_buffer_next) {
         HANDLE_LAST_ERROR();
         abort();
@@ -332,6 +343,12 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
         std::swap(d_state_buffer_prev, d_state_buffer_next);
     }
 
+    // dump alignment
+    if (dump_alignment && batch_idx % dump_every == 0) {
+        write_alignment_to_file("fwd.alignment.dump.", false, d_state_buffer_all, d_seq_lens, d_start_states, d_end_states,
+                                pruning, n_frames, n_seqs, n_states, batch_idx);
+    }
+
     // bwd pass
     start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
                       (d_state_buffer_prev, std::numeric_limits<float>::infinity(), n_states));
@@ -343,25 +360,38 @@ std::vector<torch::Tensor> fbw_cuda(torch::Tensor& am_scores, torch::Tensor& edg
         start_dev_kernel2(fill_array, n_fill_blocks, n_threads, 0,
                           (d_state_buffer_next, std::numeric_limits<float>::infinity(), n_states));
         HANDLE_LAST_ERROR();
+
         start_dev_kernel2(
                 next_frame, n_blocks, n_threads, 0,
                 (false, n_edges, sequence_stride, d_sequence_idxs, d_to, d_from, d_weights,
                  d_emission_idxs, d_state_buffer_prev, d_state_buffer_next,
                  d_am_scores + (t - 1) * frame_stride, d_edge_buffer + (t - 1) * n_edges));
         HANDLE_LAST_ERROR();
+
+        if (dump_alignment && batch_idx % dump_every == 0) {
+            start_dev_kernel2(sum_vector, n_fill_blocks, n_threads, 0,
+                              (d_state_buffer_all + t * n_states, d_state_buffer_prev, n_states));
+            HANDLE_LAST_ERROR();
+        }
+
         std::swap(d_state_buffer_prev, d_state_buffer_next);
+    }
+
+    // dump alignment
+    if (dump_alignment && batch_idx % dump_every == 0) {
+        start_dev_kernel2(sum_vector, n_fill_blocks, n_threads, 0,
+                          (d_state_buffer_all + 0 * n_states, d_state_buffer_next, n_states));
+        HANDLE_LAST_ERROR();
+        write_alignment_to_file("alignment.dump.", false, d_state_buffer_all, d_seq_lens, d_start_states, d_end_states,
+                                pruning, n_frames, n_seqs, n_states, batch_idx);
+        write_alignment_to_file("norm.alignment.dump.", true, d_state_buffer_all, d_seq_lens, d_start_states, d_end_states,
+                                pruning, n_frames, n_seqs, n_states, batch_idx);
     }
 
     // normalize at each time frame
     start_dev_kernel2(normalize, n_frames, 1, n_seqs * sizeof(float),
                       (d_edge_buffer, d_sequence_idxs, n_edges, n_seqs, d_sum_output));
     HANDLE_LAST_ERROR();
-
-    // dump alignment
-    if (dump_alignment && batch_idx % dump_every == 0) {
-        write_alignment_to_file(d_state_buffer_all, d_seq_lens, d_start_states, d_end_states,
-                                pruning, n_frames, n_seqs, n_states, batch_idx);
-    }
 
     n_fill_blocks = (n_frames * n_seqs * n_emissions + n_threads - 1u) / n_threads;
     start_dev_kernel2(

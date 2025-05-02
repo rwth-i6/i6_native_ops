@@ -17,6 +17,7 @@ except ModuleNotFoundError as exc:
 
 TOP_DIR = os.path.dirname(__file__)
 FBW_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw")
+FBW2_DIR = os.path.join(TOP_DIR, "i6_native_ops/fbw2")
 WARP_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/warp_rnnt")
 FAST_VITERBI_DIR = os.path.join(TOP_DIR, "i6_native_ops/fast_viterbi")
 MONOTONIC_RNNT_DIR = os.path.join(TOP_DIR, "i6_native_ops/monotonic_rnnt")
@@ -30,6 +31,11 @@ setup(
             name="i6_native_ops.fbw.fbw_core",
             sources=[f"{FBW_DIR}/fbw_torch.cpp", f"{FBW_DIR}/fbw_op.cu"],
             include_dirs=[FBW_DIR, COMMON_DIR],
+        ),
+        CUDAExtension(
+            name="i6_native_ops.fbw2.fbw2_core",
+            sources=[f"{FBW2_DIR}/fbw2_torch.cpp", f"{FBW2_DIR}/fbw2_op.cu"],
+            include_dirs=[FBW2_DIR, COMMON_DIR],
         ),
         CUDAExtension(
             name="i6_native_ops.warp_rnnt.warp_rnnt_core",
