@@ -1,13 +1,13 @@
 import os
 import torch
-from typing import Optional, AnyStr, Literal
+from typing import Literal
 from pkg_resources import get_distribution
 
 try:
     # Package is installed, so ops are already compiled
     __version__ = get_distribution("i6_native_ops").version
     import i6_native_ops.warp_rnnt.warp_rnnt_core as core
-except Exception as e:
+except Exception:
     # otherwise try to build locally
     from torch.utils.cpp_extension import load
 
@@ -62,7 +62,6 @@ class RNNTLossCompact(torch.autograd.Function):
         fastemit_lambda=0.0,
         enable_grad: bool = True,
     ):
-
         costs, grads, loc = core.rnnt_loss_compact(
             xs=log_probs,
             ys=labels,
@@ -103,7 +102,6 @@ def rnnt_loss(
     fastemit_lambda: float = 0.0,
     compact: bool = False,
 ) -> torch.Tensor:
-
     """The CUDA-Warp RNN-Transducer loss.
 
     Args:
@@ -157,7 +155,6 @@ def rnnt_loss(
         )
     else:
         if gather:
-
             N, T, U, V = log_probs.size()
 
             index = torch.full(
