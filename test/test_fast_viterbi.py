@@ -14,7 +14,7 @@ class TestFastViterbi(unittest.TestCase):
                 [0.1, 0.9],
                 [0.1, 0.9],
             ], device="cuda", dtype=torch.float32)
-            .unsqueeze(1)
+            .unsqueeze(0)
             .log()
         )
         edges = (
@@ -33,8 +33,7 @@ class TestFastViterbi(unittest.TestCase):
         fsa = (2, edges, weights, start_end_states)
 
         output, scores = align_viterbi(log_probs, fsa, seq_lens)
-        best_sequence = list(output[:,0])
-        score = float(scores[0])
+        best_sequence = list(output[0,:])
 
         self.assertEqual(best_sequence, [0, 0, 1, 1, 1])
 
