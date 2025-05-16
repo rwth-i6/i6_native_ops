@@ -19,8 +19,13 @@ def fbw_loss_auto(log_probs, fsa, seq_lens) -> torch.Tensor:
     edges = edges.transpose(0, 1).to(device="cpu")
     loss = torch.tensor([0.0], dtype=torch.float32, device="cuda")
     probs = log_probs.exp()
-    edge_to_eidx_mapping = { (int(from_state), int(to_state)): idx for from_state, to_state, idx, _ in edges }
-    edge_to_weight_mapping = { (int(from_state), int(to_state)): weight for (from_state, to_state, *_), weight in zip(edges, weights) }
+    edge_to_eidx_mapping = {
+        (int(from_state), int(to_state)): idx for from_state, to_state, idx, _ in edges
+    }
+    edge_to_weight_mapping = {
+        (int(from_state), int(to_state)): weight
+        for (from_state, to_state, *_), weight in zip(edges, weights)
+    }
 
     # iterate over all possible state sequences
     for inner_state_seq in itertools.product(range(num_states), repeat=num_frames - 1):
@@ -81,7 +86,7 @@ class TestFastBaumWelch(unittest.TestCase):
             torch.tensor([3], dtype=torch.int32),
             edges,
             weights,
-            start_end_states
+            start_end_states,
         )
 
         self.log_probs.retain_grad()
@@ -98,16 +103,8 @@ class TestFastBaumWelch(unittest.TestCase):
         loss_auto.sum().backward()
         grad_auto = self.log_probs_copy.grad
 
-        self.assertTrue(
-            torch.isclose(
-                loss, loss_auto
-            ).all()
-        )
-        self.assertTrue(
-            torch.isclose(
-                grad, grad_auto
-            ).all()
-        )
+        self.assertTrue(torch.isclose(loss, loss_auto).all())
+        self.assertTrue(torch.isclose(grad, grad_auto).all())
 
     def test_memory(self):
         """Test for memory leaks in the CUDA loss."""

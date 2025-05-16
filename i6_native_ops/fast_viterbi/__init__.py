@@ -5,11 +5,12 @@ from pkg_resources import get_distribution
 
 try:
     # Package is installed, so ops are already compiled
-    __version__ = get_distribution('i6_native_ops').version
+    __version__ = get_distribution("i6_native_ops").version
     import i6_native_ops.fast_viterbi.fast_viterbi_core as core
 except Exception as e:
     # otherwise try to build locally
     from torch.utils.cpp_extension import load
+
     base_path = os.path.dirname(__file__)
     core = load(
         name="fast_viterbi_core",
@@ -18,14 +19,15 @@ except Exception as e:
             os.path.join(base_path, "core.cu"),
         ],
         extra_include_paths=[os.path.join(base_path, "..", "common")],
-	)
+    )
+
 
 def align_viterbi(
     log_probs: torch.FloatTensor,
     fsa: Tuple[int, torch.IntTensor, torch.FloatTensor, torch.IntTensor],
-    seq_lens: torch.IntTensor
+    seq_lens: torch.IntTensor,
 ) -> Tuple[torch.IntTensor, torch.FloatTensor]:
-    """ Find best path with Viterbi algorithm.
+    """Find best path with Viterbi algorithm.
     :param log_probs: log probabilities of emission model as a (B, T, F)
     :param fsa: weighted finite state automaton as a tuple consisting of:
         * number of states
@@ -40,8 +42,7 @@ def align_viterbi(
     log_probs = log_probs.transpose(0, 1).contiguous()
     num_states, edge_tensor, weight_tensor, start_end_states = fsa
     alignment, scores = core.fast_viterbi(
-        log_probs, edge_tensor, weight_tensor,
-        start_end_states, seq_lens, num_states
+        log_probs, edge_tensor, weight_tensor, start_end_states, seq_lens, num_states
     )
     alignment_batch_major = alignment.transpose(0, 1).contiguous()
     return alignment_batch_major, scores
