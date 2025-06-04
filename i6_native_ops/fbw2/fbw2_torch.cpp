@@ -7,7 +7,8 @@
 namespace py = pybind11;
 
 std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& num_edges, torch::Tensor& seq_lens,
-                                     torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights, torch::Tensor& start_end_states,
+                                     torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights,
+                                     torch::Tensor& start_states, torch::Tensor& end_states,
                                      DebugOptionsV2 debug_options);
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
@@ -18,25 +19,38 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     CHECK_CONTIGUOUS(x)
 
 std::vector<torch::Tensor> fbw2(torch::Tensor& num_states, torch::Tensor& num_edges, torch::Tensor& seq_lens,
-                                torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights, torch::Tensor& start_end_states,
+                                torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights,
+                                torch::Tensor& start_states, torch::Tensor& end_states,
+                                torch::Tensor& num_end_states, torch::Tensor& end_state_offsets,
                                 DebugOptionsV2 debug_options = DebugOptionsV2()) {
     CHECK_HOST(num_states);
     CHECK_HOST(num_edges);
+    CHECK_HOST(num_end_states);
+    CHECK_HOST(end_state_offsets);
     CHECK_INPUT(seq_lens);
     CHECK_INPUT(am_scores);
     CHECK_INPUT(edges);
     CHECK_INPUT(weights);
-    CHECK_INPUT(start_end_states);
+    CHECK_INPUT(start_states);
+    CHECK_INPUT(end_states);
 
     auto outputs = fbw2_cuda(num_states, num_edges, seq_lens,
-                             am_scores, edges, weights, start_end_states,
+                             am_scores, edges, weights,
+                             start_states, end_states,
                              debug_options);
 
     return outputs;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("fbw2", &fbw2, "Fast Baum-Welch CUDA routine version 2");
+    m.def(
+        "fbw2", &fbw2, "Fast Baum-Welch CUDA routine version 2",
+        py::arg("num_states"), py::arg("num_edges"), py::arg("seq_lens"),
+        py::arg("am_scores"), py::arg("edges"), py::arg("weights"),
+        py::arg("start_states"), py::arg("end_states"),
+        py::arg("num_end_states"), py::arg("end_state_offsets"),
+        py::arg("debug_options")
+    );
 
     py::class_<DebugOptionsV2>(m, "DebugOptionsV2")
             .def(py::init<>())
