@@ -1,34 +1,44 @@
 import os
 import torch
-from typing import Optional, AnyStr, Literal
+from typing import Literal
 from pkg_resources import get_distribution
 
 try:
     # Package is installed, so ops are already compiled
-    __version__ = get_distribution('i6_native_ops').version
+    __version__ = get_distribution("i6_native_ops").version
     import i6_native_ops.warp_rnnt.warp_rnnt_core as core
-except Exception as e:
+except Exception:
     # otherwise try to build locally
     from torch.utils.cpp_extension import load
+
     base_path = os.path.dirname(__file__)
     core = load(
         name="warp_rnnt_core",
         sources=[
-                f"{base_path}/core.cu",
-                f"{base_path}/core_gather.cu",
-                f"{base_path}/core_compact.cu",
-                f"{base_path}/binding.cpp"
-        ]
-	)
+            f"{base_path}/core.cu",
+            f"{base_path}/core_gather.cu",
+            f"{base_path}/core_compact.cu",
+            f"{base_path}/binding.cpp",
+        ],
+    )
 
 
 class RNNTLoss(torch.autograd.Function):
-
     @staticmethod
-    def forward(ctx, log_probs, labels, frames_lengths, labels_lengths, blank=0, fastemit_lambda=0.0):
+    def forward(
+        ctx,
+        log_probs,
+        labels,
+        frames_lengths,
+        labels_lengths,
+        blank=0,
+        fastemit_lambda=0.0,
+    ):
         costs, ctx.grads = core.rnnt_loss(
-            xs=log_probs, ys=labels,
-            xn=frames_lengths, yn=labels_lengths,
+            xs=log_probs,
+            ys=labels,
+            xn=frames_lengths,
+            yn=labels_lengths,
             blank=blank,
             fastemit_lambda=fastemit_lambda,
         )
@@ -39,20 +49,32 @@ class RNNTLoss(torch.autograd.Function):
         grads_output = grads_output.view(-1, 1, 1, 1).to(ctx.grads)
         return ctx.grads.mul_(grads_output), None, None, None, None, None, None
 
+
 class RNNTLossCompact(torch.autograd.Function):
-
     @staticmethod
-    def forward(ctx, log_probs, labels, frames_lengths, labels_lengths, blank=0, fastemit_lambda=0.0, enable_grad: bool = True):
-
+    def forward(
+        ctx,
+        log_probs,
+        labels,
+        frames_lengths,
+        labels_lengths,
+        blank=0,
+        fastemit_lambda=0.0,
+        enable_grad: bool = True,
+    ):
         costs, grads, loc = core.rnnt_loss_compact(
-            xs=log_probs, ys=labels,
-            xn=frames_lengths, yn=labels_lengths,
+            xs=log_probs,
+            ys=labels,
+            xn=frames_lengths,
+            yn=labels_lengths,
             blank=blank,
             fastemit_lambda=fastemit_lambda,
-            required_grad=enable_grad
+            required_grad=enable_grad,
         )
         if enable_grad:
-            cumlen = torch.cumsum(frames_lengths * (labels_lengths+1), dim=0, dtype=torch.int32)
+            cumlen = torch.cumsum(
+                frames_lengths * (labels_lengths + 1), dim=0, dtype=torch.int32
+            )
             ctx.V = log_probs.size(-1)
             ctx.blank = blank
             ctx.save_for_backward(grads, loc, cumlen)
@@ -62,25 +84,24 @@ class RNNTLossCompact(torch.autograd.Function):
     def backward(ctx, grads_output):
         grads, loc, cumlen = ctx.saved_tensors
         grads_input = core.rnnt_loss_compact_backward(
-            grads_output.contiguous(), 
-            grads, cumlen,
-            loc, ctx.V, ctx.blank
+            grads_output.contiguous(), grads, cumlen, loc, ctx.V, ctx.blank
         )
 
         return grads_input, None, None, None, None, None, None
 
 
-def rnnt_loss(log_probs: torch.FloatTensor,
-              labels: torch.IntTensor,
-              frames_lengths: torch.IntTensor,
-              labels_lengths: torch.IntTensor,
-              average_frames: bool = False,
-              reduction: Literal['sum', 'mean', 'none'] = 'none',
-              blank: int = 0,
-              gather: bool = False,
-              fastemit_lambda: float = 0.0,
-              compact: bool = False) -> torch.Tensor:
-
+def rnnt_loss(
+    log_probs: torch.FloatTensor,
+    labels: torch.IntTensor,
+    frames_lengths: torch.IntTensor,
+    labels_lengths: torch.IntTensor,
+    average_frames: bool = False,
+    reduction: Literal["sum", "mean", "none"] = "none",
+    blank: int = 0,
+    gather: bool = False,
+    fastemit_lambda: float = 0.0,
+    compact: bool = False,
+) -> torch.Tensor:
     """The CUDA-Warp RNN-Transducer loss.
 
     Args:
@@ -124,26 +145,31 @@ def rnnt_loss(log_probs: torch.FloatTensor,
 
     if compact:
         costs = RNNTLossCompact.apply(
-            log_probs.float(), 
-            labels, frames_lengths,
-            labels_lengths, blank, 
-            fastemit_lambda, 
-            (log_probs.requires_grad and torch.is_grad_enabled())
+            log_probs.float(),
+            labels,
+            frames_lengths,
+            labels_lengths,
+            blank,
+            fastemit_lambda,
+            (log_probs.requires_grad and torch.is_grad_enabled()),
         )
     else:
         if gather:
-
             N, T, U, V = log_probs.size()
 
-            index = torch.full([N, T, U, 2], blank, device=labels.device, dtype=torch.long)
+            index = torch.full(
+                [N, T, U, 2], blank, device=labels.device, dtype=torch.long
+            )
 
-            index[:, :, :U-1, 1] = labels.unsqueeze(dim=1)
+            index[:, :, : U - 1, 1] = labels.unsqueeze(dim=1)
 
             log_probs = log_probs.gather(dim=3, index=index)
 
             blank = -1
 
-        costs = RNNTLoss.apply(log_probs, labels, frames_lengths, labels_lengths, blank, fastemit_lambda)
+        costs = RNNTLoss.apply(
+            log_probs, labels, frames_lengths, labels_lengths, blank, fastemit_lambda
+        )
 
     if average_frames:
         costs = costs / frames_lengths.to(log_probs)
@@ -156,5 +182,5 @@ def rnnt_loss(log_probs: torch.FloatTensor,
         return costs.mean()
     else:
         raise ValueError(
-            f"Unknown reduction method: {reduction}, expected to be one of ['mean', 'sum', 'none']")
-
+            f"Unknown reduction method: {reduction}, expected to be one of ['mean', 'sum', 'none']"
+        )

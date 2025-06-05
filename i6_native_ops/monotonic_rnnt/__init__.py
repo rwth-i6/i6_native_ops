@@ -11,7 +11,7 @@ try:
     # Package is installed, so ops are already compiled
     __version__ = get_distribution("i6_native_ops").version
     import i6_native_ops.monotonic_rnnt.monotonic_rnnt_core as core
-except Exception as e:
+except Exception:
     # otherwise try to build locally
     from torch.utils.cpp_extension import load
 
