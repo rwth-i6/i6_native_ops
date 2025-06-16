@@ -9,6 +9,7 @@ namespace py = pybind11;
 std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& num_edges, torch::Tensor& seq_lens,
                                      torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights,
                                      torch::Tensor& start_states, torch::Tensor& end_states,
+                                     torch::Tensor& end_states_offsets,
                                      DebugOptionsV2 debug_options);
 
 #define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
@@ -37,6 +38,7 @@ std::vector<torch::Tensor> fbw2(torch::Tensor& num_states, torch::Tensor& num_ed
     auto outputs = fbw2_cuda(num_states, num_edges, seq_lens,
                              am_scores, edges, weights,
                              start_states, end_states,
+                             end_state_offsets,
                              debug_options);
 
     return outputs;
