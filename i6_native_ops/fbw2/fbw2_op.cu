@@ -717,18 +717,10 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
 
     // if not end state offsets were provided we assume that there is one end state per sequence
     if (not end_state_offsets.defined() or not end_state_offsets.numel()) {
-        printf("not defined\n");
-        // thrust::host_vector<unsigned> h_end_state_offsets(n_seqs + 1);
-        // thrust::sequence(h_end_state_offsets.begin(), h_end_state_offsets.end());
         thrust::device_vector<unsigned> d_end_state_offsets_;
         thrust::sequence(d_end_state_offsets_.begin(), d_end_state_offsets_.end());
         d_end_state_offsets = d_end_state_offsets_.data().get();
-
-        // thrust::copy(d_end_state_offsets_.begin(), d_end_state_offsets_.end(),
-        //              std::ostream_iterator<int>(std::cout, " "));
-        // std::cout << std::endl;
     }
-
 
     // calculate size of fwb kernel blocks / grid
     unsigned max_edges_per_seq = *std::max_element(h_num_edges, h_num_edges + n_seqs);
