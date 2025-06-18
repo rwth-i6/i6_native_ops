@@ -37,12 +37,9 @@ class FastBaumWelch2Loss(torch.autograd.Function):
             end_state_offsets = torch.Tensor()
         else:
             assert len(start_end_states) == 4
-            (
-                start_states,
-                end_states,
-                num_end_states,
-                end_state_offsets
-            ) = start_end_states
+            (start_states, end_states, num_end_states, end_state_offsets) = (
+                start_end_states
+            )
 
         if debug_opts is None:
             debug_opts = DebugOptionsV2()
