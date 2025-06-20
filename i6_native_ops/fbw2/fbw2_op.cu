@@ -336,7 +336,6 @@ void baum_welch_v2(unsigned num_frames, unsigned num_seqs, unsigned num_emission
             for (unsigned fs = final_state_offsets[seq]; fs < final_state_offsets[seq+1]; fs++) {
                 prev_states[final_states[fs]] = 0.0;
             }
-            // prev_states[final_states[seq]] = 0.0;
         }
 
         for (unsigned state = state_offsets[seq] + threadIdx.x; state < state_offsets[seq+1]; state += blockDim.x) {
