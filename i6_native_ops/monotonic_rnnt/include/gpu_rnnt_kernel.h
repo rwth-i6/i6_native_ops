@@ -71,10 +71,10 @@ inline HOSTDEVICE int beta_s_max(const int t, const int S, const int *max_allowe
     return t == 0 ? 0 : (t < max_allowed_s[t - 1] ? t : max_allowed_s[t - 1]);
 }
 
-inline HOSTDEVICE int denom_idx(const int t, const int s, const int S) { return t * (S + 1) + s; }
+inline HOSTDEVICE int64_t denom_idx(const int t, const int s, const int S) { return t * (S + 1) + s; }
 
-inline HOSTDEVICE int act_idx(const int t, const int s, const int v, const int S, const int V) {
-    return (denom_idx(t, s, S)) * V + v;
+inline HOSTDEVICE int64_t act_idx(const int t, const int s, const int v, const int S, const int V) {
+    return denom_idx(t, s, S) * V + v;
 }
 
 template <typename dtype>
