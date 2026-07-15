@@ -83,7 +83,7 @@ __global__ void reduce_rows(Iop f, Rop g, const T *const acts, T *output, int nu
 
     int tid = static_cast<int>(threadIdx.x);
     int idx = tid;
-    int col = static_cast<int>(blockIdx.x);
+    int64_t col = static_cast<int64_t>(blockIdx.x);
     T curr;
 
     // Each block works on a column
@@ -116,7 +116,7 @@ __global__ void reduce_minus(Iop f, Rop g, const T *const acts, T *output, int n
 
     int tid = static_cast<int>(threadIdx.x);
     int idx = tid;
-    int col = static_cast<int>(blockIdx.x);
+    int64_t col = static_cast<int64_t>(blockIdx.x);
     T curr;
     T max = output[col];
 

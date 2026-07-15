@@ -138,7 +138,7 @@ class CpuRNNTComputer {
                 printf("  t = %d\n", t);
                 for (int s = 0; s <= 3; s++) {
                     printf("    s = %d\n      ", s);
-                    int denom_idx = denom_start_indices_host[b] + t * (S[b] + 1) + s;
+                    int64_t denom_idx = denom_start_indices_host[b] + t * (S[b] + 1) + s;
                     for (int v = 0; v < V; v++) {
                         printf("%.4f ", exp(cpu_acts[(denom_idx)*V + v] + cpu_denoms[denom_idx]));
                     }
