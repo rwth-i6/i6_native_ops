@@ -45,7 +45,7 @@ class CpuRNNTWorkspaceManager : public RNNTWorkspaceManager {
           workspace_(nullptr) {
         act_start_indices_[0] = 0;
         for (int b = 1ul; b < B_; ++b) {
-            act_start_indices_[b] = act_start_indices_[b - 1] + T_[b - 1] * (S_[b - 1] + 1) * V_;
+            act_start_indices_[b] = act_start_indices_[b - 1] + static_cast<int64_t>(T_[b - 1]) * (S_[b - 1] + 1) * V_;
         }
 
         min_allowed_s_.reserve(B_);
@@ -122,7 +122,7 @@ class CpuRNNTWorkspaceManager : public RNNTWorkspaceManager {
         return labels_[b * S_max_ + s];
     }
 
-    [[nodiscard]] int act_index(int b, int t, int s, int v) const {
+    [[nodiscard]] int64_t act_index(int b, int t, int s, int v) const {
         assert(0 <= b);
         assert(b <= B_);
         assert(0 <= t);
@@ -131,7 +131,7 @@ class CpuRNNTWorkspaceManager : public RNNTWorkspaceManager {
         assert(s <= S_[b]);
         assert(0 <= v);
         assert(v <= V_);
-        return act_start_indices_[b] + (t * (S_[b] + 1) + s) * V_ + v;
+        return act_start_indices_[b] + static_cast<int64_t>(t * (S_[b] + 1) + s) * V_ + v;
     }
 
     [[nodiscard]] inline dtype act(int b, int t, int s, int v) const { return acts_[act_index(b, t, s, v)]; }
@@ -264,7 +264,7 @@ class CpuRNNTWorkspaceManager : public RNNTWorkspaceManager {
     const dtype *const acts_;
     const int *const labels_;
 
-    std::vector<int> act_start_indices_;
+    std::vector<int64_t> act_start_indices_;
 
     std::vector<dtype *> denom_;
     std::vector<dtype *> alphas_;

@@ -95,7 +95,7 @@ __global__ void compute_alphas_kernel_naive(const Tp *const acts, const Tp *cons
     const int S_b = S[b];
     const int *labels_b = labels + b * *S_max;
     const int var_start_idx_b = var_start_offsets[b];
-    const int denom_start_idx_b = denom_start_indices[b];
+    const int64_t denom_start_idx_b = denom_start_indices[b];
     const Tp *const acts_b = acts + denom_start_idx_b * *V;
     const Tp *const denom_b = denom + denom_start_idx_b;
     Tp *alphas_b = alphas + var_start_idx_b;
@@ -132,7 +132,7 @@ __global__ void compute_alphas_kernel(const Tp *const acts, const Tp *const deno
     const int S_b = S[b];
     const int *labels_b = labels + b * *S_max;
     const int var_start_idx_b = var_start_offsets[b];
-    const int denom_start_idx_b = denom_start_indices[b];
+    const int64_t denom_start_idx_b = denom_start_indices[b];
     const Tp *const acts_b = acts + denom_start_idx_b * *V;
     const Tp *const denom_b = denom + denom_start_idx_b;
     Tp *alphas_b = alphas + var_start_idx_b;
@@ -172,7 +172,7 @@ __global__ void compute_betas_kernel_naive(const Tp *const acts, const Tp *const
     const int S_b = S[b];
     const int *labels_b = labels + b * *S_max;
     const int var_start_offset_b = var_start_offsets[b];
-    const int denom_start_idx_b = denom_start_indices[b];
+    const int64_t denom_start_idx_b = denom_start_indices[b];
     const Tp *const acts_b = acts + denom_start_idx_b * *V;
     const Tp *const denom_b = denom + denom_start_idx_b;
     Tp *betas_b = betas + var_start_offset_b;
@@ -208,7 +208,7 @@ __global__ void compute_betas_kernel(const Tp *const acts, const Tp *const denom
     const int S_b = S[b];
     const int *labels_b = labels + b * *S_max;
     const int var_start_idx_b = var_start_offsets[b];
-    const int denom_start_idx_b = denom_start_indices[b];
+    const int64_t denom_start_idx_b = denom_start_indices[b];
     const Tp *const acts_b = acts + denom_start_idx_b * *V;
     const Tp *const denom_b = denom + denom_start_idx_b;
     Tp *betas_b = betas + var_start_idx_b;

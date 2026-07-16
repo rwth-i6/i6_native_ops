@@ -129,7 +129,7 @@ class GpuRNNTWorkspaceManager : public RNNTWorkspaceManager {
     }
 
     [[nodiscard]] std::vector<dtype> acts_host() const {
-        std::vector<dtype> acts_h(num_denoms() * V_host());
+        std::vector<dtype> acts_h(static_cast<size_t>(num_denoms()) * V_host());
         cudaMemcpy(acts_h.data(), acts, dtype_size_ * acts_h.size(), cudaMemcpyDeviceToHost);
         return acts_h;
     }
