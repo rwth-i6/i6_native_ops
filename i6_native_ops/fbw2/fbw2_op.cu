@@ -301,7 +301,7 @@ DEF_KERNEL
 void baum_welch_v2(unsigned num_frames, unsigned num_seqs, unsigned num_emissions, unsigned num_edges,
                    unsigned const* state_offsets, unsigned const* edge_offsets, unsigned const* seq_lens,
                    unsigned const* from_buffer, unsigned const* to_buffer, float const* weight_buffer, unsigned const* emission_idxs,
-                   unsigned const* init_states, unsigned const* final_states,
+                   unsigned const* init_states, unsigned const* final_states, unsigned const* final_state_offsets,
                    float* prev_states, float* next_states, float const* am_scores, float* edge_buffer, float* norm_factors,
                    float* state_buffer_all) {
     unsigned seq = blockIdx.x * blockDim.y + threadIdx.y;
@@ -333,7 +333,9 @@ void baum_welch_v2(unsigned num_frames, unsigned num_seqs, unsigned num_emission
         float* cur_frame_edge_buffer = edge_buffer + (t - (fwd ? 0 : 1)) * num_edges;
 
         if (not fwd and threadIdx.x == 0 and t == seq_lens[seq]) {
-            prev_states[final_states[seq]] = 0.0;
+            for (unsigned fs = final_state_offsets[seq]; fs < final_state_offsets[seq+1]; fs++) {
+                prev_states[final_states[fs]] = 0.0;
+            }
         }
 
         for (unsigned state = state_offsets[seq] + threadIdx.x; state < state_offsets[seq+1]; state += blockDim.x) {
@@ -646,13 +648,17 @@ void write_output_to_file(float* d_out, unsigned* d_seq_lens, float pruning, uns
     }
 }
 
+
 std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& num_edges, torch::Tensor& seq_lens,
-                                     torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights, torch::Tensor& start_end_states,
+                                     torch::Tensor& am_scores, torch::Tensor& edges, torch::Tensor& weights,
+                                     torch::Tensor& start_states, torch::Tensor& end_states,
+                                     torch::Tensor& end_state_offsets,
                                      DebugOptionsV2 debug_options) {
     // am_scores is a [T, B, F] tensor
 
-    assert_cmp(Ndarray_DIMS(start_end_states)[0], ==, 2);
-    assert_cmp(Ndarray_DIMS(start_end_states)[1], ==, Ndarray_DIMS(am_scores)[1]);
+    assert_cmp(Ndarray_DIMS(start_states)[0], ==, Ndarray_DIMS(am_scores)[1]);
+    // assert_cmp(Ndarray_DIMS(end_states)[0], ==, 1);
+    // assert_cmp(Ndarray_DIMS(end_states)[1], ==, Ndarray_DIMS(am_scores)[1]);
     assert_cmp(Ndarray_DIMS(num_edges)[0], ==, Ndarray_DIMS(am_scores)[1]);
     assert_cmp(Ndarray_DIMS(num_states)[0], ==, Ndarray_DIMS(am_scores)[1]);
 
@@ -675,11 +681,12 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     float*    d_weights       = Ndarray_DEV_DATA(weights);
     float*    d_am_scores     = Ndarray_DEV_DATA(am_scores);
 
-    unsigned* d_start_states = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(start_end_states) + 0 * Ndarray_STRIDE(start_end_states, 0));
-    unsigned* d_end_states   = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(start_end_states) + 1 * Ndarray_STRIDE(start_end_states, 0));
-    unsigned* d_seq_lens     = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(seq_lens));
-    float*    d_out          = Ndarray_DEV_DATA(out);
-    float*    d_loss         = Ndarray_DEV_DATA(loss);
+    unsigned* d_start_states      = Ndarray_DEV_DATA_uint32(start_states);
+    unsigned* d_end_states        = Ndarray_DEV_DATA_uint32(end_states);
+    unsigned* d_end_state_offsets = Ndarray_DEV_DATA_uint32(end_state_offsets);
+    unsigned* d_seq_lens          = reinterpret_cast<unsigned*>(Ndarray_DEV_DATA_int32(seq_lens));
+    float*    d_out               = Ndarray_DEV_DATA(out);
+    float*    d_loss              = Ndarray_DEV_DATA(loss);
 
     unsigned n_frames    = Ndarray_DIMS(am_scores)[0];
     unsigned n_seqs      = Ndarray_DIMS(am_scores)[1];
@@ -705,7 +712,14 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     // calculate edge offsets per seq
     thrust::host_vector<unsigned> edge_offsets_host(n_seqs + 1, 0);
     thrust::inclusive_scan(h_num_edges, h_num_edges + n_seqs, edge_offsets_host.begin() + 1);
-    thrust::device_vector<unsigned> edge_offsets = edge_offsets_host;
+    thrust::device_vector<unsigned> d_edge_offsets = edge_offsets_host;
+
+    // if not end state offsets were provided we assume that there is one end state per sequence
+    if (not end_state_offsets.defined() or not end_state_offsets.numel()) {
+        thrust::device_vector<unsigned> d_end_state_offsets_;
+        thrust::sequence(d_end_state_offsets_.begin(), d_end_state_offsets_.end());
+        d_end_state_offsets = d_end_state_offsets_.data().get();
+    }
 
     // calculate size of fwb kernel blocks / grid
     unsigned max_edges_per_seq = *std::max_element(h_num_edges, h_num_edges + n_seqs);
@@ -729,7 +743,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
         merge_edge_idxs.resize(n_edges, 0);
         merge_edge_targets.resize(n_edges, 0);
         start_dev_kernel2(compute_edge_merging_vectors, n_blocks_fbw, dim3(1, n_threads_inter_seq), 0,
-                          (n_seqs, n_threads_intra_seq, d_to, edge_offsets.data().get(), merge_edge_offsets.data().get(), merge_edge_idxs.data().get(), merge_edge_targets.data().get()));
+                          (n_seqs, n_threads_intra_seq, d_to, d_edge_offsets.data().get(), merge_edge_offsets.data().get(), merge_edge_idxs.data().get(), merge_edge_targets.data().get()));
         HANDLE_LAST_ERROR();
 
         if (dump_edges) {
@@ -758,7 +772,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     if (debug_options.explicit_merge) {
         start_dev_kernel2(baum_welch<true>, n_blocks_fbw, block_size_fbw, 0,
                           (n_frames, n_seqs, n_emissions, n_edges,
-                           state_offsets.data().get(), edge_offsets.data().get(), d_seq_lens,
+                           state_offsets.data().get(), d_edge_offsets.data().get(), d_seq_lens,
                            d_from, d_to, d_weights, d_emission_idxs,
                            d_start_states, d_end_states,
                            state_buffer_prev.data().get(), state_buffer_next.data().get(), d_am_scores, edge_buffer.data().get(),
@@ -769,8 +783,8 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     else {
         start_dev_kernel2(baum_welch_v2<true>, n_blocks_fbw, block_size_fbw, 0,
                           (n_frames, n_seqs, n_emissions, n_edges,
-                           state_offsets.data().get(), edge_offsets.data().get(), d_seq_lens,
-                           d_from, d_to, d_weights, d_emission_idxs, d_start_states, d_end_states,
+                           state_offsets.data().get(), d_edge_offsets.data().get(), d_seq_lens,
+                           d_from, d_to, d_weights, d_emission_idxs, d_start_states, d_end_states, d_end_state_offsets,
                            state_buffer_prev.data().get(), state_buffer_next.data().get(), d_am_scores, edge_buffer.data().get(),
                            debug_options.per_frame_norm ? nullptr : d_loss,
                            dump_alignment ? state_buffer_all.data().get() : nullptr));
@@ -789,7 +803,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     if (debug_options.explicit_merge) {
         thrust::fill(merge_edge_offsets.begin(), merge_edge_offsets.end(), 0);
         start_dev_kernel2(compute_edge_merging_vectors, n_blocks_fbw, dim3(1, n_threads_inter_seq), 0,
-                          (n_seqs, n_threads_intra_seq, d_from, edge_offsets.data().get(), merge_edge_offsets.data().get(), merge_edge_idxs.data().get(), merge_edge_targets.data().get()));
+                          (n_seqs, n_threads_intra_seq, d_from, d_edge_offsets.data().get(), merge_edge_offsets.data().get(), merge_edge_idxs.data().get(), merge_edge_targets.data().get()));
         HANDLE_LAST_ERROR();
 
         if (dump_edges) {
@@ -801,7 +815,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     if (debug_options.explicit_merge) {
         start_dev_kernel2(baum_welch<false>, n_blocks_fbw, block_size_fbw, 0,
                           (n_frames, n_seqs, n_emissions, n_edges,
-                           state_offsets.data().get(), edge_offsets.data().get(), d_seq_lens,
+                           state_offsets.data().get(), d_edge_offsets.data().get(), d_seq_lens,
                            d_to, d_from, d_weights, d_emission_idxs,
                            d_start_states, d_end_states,
                            state_buffer_prev.data().get(), state_buffer_next.data().get(), d_am_scores, edge_buffer.data().get(),
@@ -812,9 +826,9 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     else {
         start_dev_kernel2(baum_welch_v2<false>, n_blocks_fbw, block_size_fbw, 0,
                           (n_frames, n_seqs, n_emissions, n_edges,
-                           state_offsets.data().get(), edge_offsets.data().get(), d_seq_lens,
+                           state_offsets.data().get(), d_edge_offsets.data().get(), d_seq_lens,
                            d_to, d_from, d_weights, d_emission_idxs,
-                           d_start_states, d_end_states,
+                           d_start_states, d_end_states, d_end_state_offsets,
                            state_buffer_prev.data().get(), state_buffer_next.data().get(), d_am_scores, edge_buffer.data().get(),
                            debug_options.per_frame_norm ? nullptr : d_loss,
                            dump_alignment ? state_buffer_all.data().get() : nullptr));
@@ -832,7 +846,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     if (debug_options.per_frame_norm) {
         // normalize at each time frame
         start_dev_kernel2(normalize, dim3(n_blocks_fbw, n_frames), block_size_fbw, 0,
-                          (n_seqs, n_edges, d_seq_lens, edge_buffer.data().get(), edge_offsets.data().get(), per_frame_norm.data().get()));
+                          (n_seqs, n_edges, d_seq_lens, edge_buffer.data().get(), d_edge_offsets.data().get(), per_frame_norm.data().get()));
         HANDLE_LAST_ERROR();
         // average the loss over all frames
         unsigned average_threads = max_threads_per_block;
@@ -845,7 +859,7 @@ std::vector<torch::Tensor> fbw2_cuda(torch::Tensor& num_states, torch::Tensor& n
     }
 
     start_dev_kernel2(compute_result, dim3(n_blocks_fbw, n_frames), block_size_fbw, 0,
-                      (edge_buffer.data().get(), d_out, d_emission_idxs, d_seq_lens, edge_offsets.data().get(),
+                      (edge_buffer.data().get(), d_out, d_emission_idxs, d_seq_lens, d_edge_offsets.data().get(),
                        frame_stride, sequence_stride, n_edges, n_seqs));
     HANDLE_LAST_ERROR();
     

@@ -29,7 +29,17 @@ except Exception:
 class FastBaumWelch2Loss(torch.autograd.Function):
     @staticmethod
     def forward(ctx, am_scores, fsa, seq_lens, debug_opts=None):
-        num_states, num_edges, edge_tensor, weight_tensor, start_end_states = fsa
+        num_states, num_edges, edge_tensor, weight_tensor, *start_end_states = fsa
+
+        if len(start_end_states) == 1:
+            start_states, end_states = start_end_states[0]
+            num_end_states = torch.Tensor()
+            end_state_offsets = torch.Tensor()
+        else:
+            assert len(start_end_states) == 4
+            (start_states, end_states, num_end_states, end_state_offsets) = (
+                start_end_states
+            )
 
         if debug_opts is None:
             debug_opts = DebugOptionsV2()
@@ -40,7 +50,10 @@ class FastBaumWelch2Loss(torch.autograd.Function):
             am_scores,
             edge_tensor,
             weight_tensor,
-            start_end_states,
+            start_states,
+            end_states,
+            num_end_states,
+            end_state_offsets,
             debug_opts,
         )
         ctx.save_for_backward(grad)
@@ -79,6 +92,10 @@ def fbw2_loss(
         * a (E,) tensor of floats holding the weight of each edge
         * a (2, B) tensor of starting and ending states for each automaton in the batch where
             the first row are starting states and the second the corresponding ending states
+        * optionally a (N) tensor E of end states. In case this is provided the previous
+            tensor must be of shape (B)
+        * optionally a (B) tensor of numbers of end states per batch
+        * optionally a (B) tensor specifying the offset of end states in E for each sequence
     :param seq_lens: (B,) tensor consisting of the sequence lengths
     :return: (B,) tensor of loss values
     """
